@@ -1,0 +1,296 @@
+---
+title: 'mush_classification_2'
+author: "Rachael Hawthorne"
+date: "7/30/2020"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(randomForest)
+library(caret)
+library(e1071)
+library(psych)
+library(viridis)
+library(klaR)
+library(dplyr)
+library(party)
+```
+
+```{r preprocessing}
+##there are supposedly missing values in stalk-root
+mushies = mushrooms
+mushies$class = factor(mushies$class)
+mushies$bruises = factor(mushies$bruises)
+mushies$gill.size = factor(mushies$gill.size)
+mushies$stalk.shape = factor(mushies$stalk.shape)
+
+#encoding dummy variables: > 2 levels
+mushies$cap.shape = factor(mushies$cap.shape)
+mushies$cap.surface = factor(mushies$cap.surface)
+mushies$cap.color = factor(mushies$cap.color)
+mushies$odor = factor(mushies$odor)
+mushies$gill.attachment = factor(mushies$gill.attachment)
+mushies$gill.spacing = factor(mushies$gill.spacing)
+mushies$gill.color = factor(mushies$gill.color)
+mushies$stalk.root = factor(mushies$stalk.root)
+mushies$stalk.surface.above.ring =factor(mushies$stalk.surface.above.ring)
+mushies$stalk.surface.below.ring = factor(mushies$stalk.surface.below.ring)
+mushies$stalk.color.above.ring = factor(mushies$stalk.color.above.ring)
+mushies$stalk.color.below.ring = factor(mushies$stalk.color.below.ring)
+mushies$veil.color = factor(mushies$veil.color)
+mushies$ring.number = factor(mushies$ring.number)
+mushies$ring.type = factor(mushies$ring.type)
+mushies$spore.print.color = factor(mushies$spore.print.color)
+mushies$population = factor(mushies$population)
+mushies$habitat = factor(mushies$habitat)
+mushies$veil.type = factor(mushies$veil.type)
+
+mushies$veil.type[mushies$veil.type == "u"]
+mushies$veil.type = NULL
+mushies$stalk.root[mushies$stalk.root== '?' ] = NA
+#mushies[!complete.cases(mushies),]
+mushies$stalk.root = NULL
+str(mushies)
+plot(mushies$class)
+```
+
+```{r decision_tree: RF}
+#random forest
+set.seed(1)
+mushies = mushrooms
+mushies$class = factor(mushies$class)
+mushies$bruises = factor(mushies$bruises)
+mushies$gill.size = factor(mushies$gill.size)
+mushies$stalk.shape = factor(mushies$stalk.shape)
+
+mushies$cap.shape = factor(mushies$cap.shape)
+mushies$cap.surface = factor(mushies$cap.surface)
+mushies$cap.color = factor(mushies$cap.color)
+mushies$odor = factor(mushies$odor)
+mushies$gill.attachment = factor(mushies$gill.attachment)
+mushies$gill.spacing = factor(mushies$gill.spacing)
+mushies$gill.color = factor(mushies$gill.color)
+mushies$stalk.root = factor(mushies$stalk.root)
+mushies$stalk.surface.above.ring =factor(mushies$stalk.surface.above.ring)
+mushies$stalk.surface.below.ring = factor(mushies$stalk.surface.below.ring)
+mushies$stalk.color.above.ring = factor(mushies$stalk.color.above.ring)
+mushies$stalk.color.below.ring = factor(mushies$stalk.color.below.ring)
+mushies$veil.color = factor(mushies$veil.color)
+mushies$ring.number = factor(mushies$ring.number)
+mushies$ring.type = factor(mushies$ring.type)
+mushies$spore.print.color = factor(mushies$spore.print.color)
+mushies$population = factor(mushies$population)
+mushies$habitat = factor(mushies$habitat)
+mushies$veil.type = factor(mushies$veil.type)
+
+mushies$veil.type[mushies$veil.type == "u"]
+mushies$veil.type = NULL
+mushies$stalk.root[mushies$stalk.root== '?' ] = NA
+mushies$stalk.root = NULL
+
+sample_sz = floor(0.75*nrow(mushies))
+train_ind = sample(seq_len(nrow(mushies)), size=sample_sz)
+dt.train = mushies[train_ind,]
+dt.test = mushies[-train_ind,]
+dt.labs = mushies[-train_ind, "class"]
+
+#accuracy went up as the number of trees went down
+dt.mush = randomForest(class~., ntree = 500, data = dt.train)
+dt.yhat = predict(dt.mush, newdata = dt.test)
+dt.comp = table(data.frame(dt.yhat, dt.test$class))
+
+dt.mushc = ctree(class~., data = dt.train)
+plot(dt.mushc, type = "simple")
+dt.yhat1 = predict(dt.mushc, newdata = dt.test)
+dt.comp1 = table(data.frame(dt.yhat1, dt.test$class))
+
+
+fourfoldplot(dt.comp, color = viridis(2, begin = .3, end = .8), conf.level = 0, margin = 1, main = "Random Forest Confusion Matrix")
+fourfoldplot(dt.comp1, color = viridis(2, begin = .3, end = .8), conf.level = 0, margin = 1, main = "Random Forest Confusion Matrix")
+
+#most important variables for prediction
+varImpPlot(dt.mush)
+```
+
+```{r PCA&Clustering}
+set.seed(1)
+mushies = mushrooms
+
+mushies$class = factor(mushies$class)
+mushies$bruises = factor(mushies$bruises)
+mushies$gill.size = factor(mushies$gill.size)
+mushies$stalk.shape = factor(mushies$stalk.shape)
+mushies$cap.shape = factor(mushies$cap.shape)
+mushies$cap.surface = factor(mushies$cap.surface)
+mushies$cap.color = factor(mushies$cap.color)
+mushies$odor = factor(mushies$odor)
+mushies$gill.attachment = factor(mushies$gill.attachment)
+mushies$gill.spacing = factor(mushies$gill.spacing)
+mushies$gill.color = factor(mushies$gill.color)
+mushies$stalk.root = factor(mushies$stalk.root)
+mushies$stalk.surface.above.ring =factor(mushies$stalk.surface.above.ring)
+mushies$stalk.surface.below.ring = factor(mushies$stalk.surface.below.ring)
+mushies$stalk.color.above.ring = factor(mushies$stalk.color.above.ring)
+mushies$stalk.color.below.ring = factor(mushies$stalk.color.below.ring)
+mushies$veil.color = factor(mushies$veil.color)
+mushies$ring.number = factor(mushies$ring.number)
+mushies$ring.type = factor(mushies$ring.type)
+mushies$spore.print.color = factor(mushies$spore.print.color)
+mushies$population = factor(mushies$population)
+mushies$habitat = factor(mushies$habitat)
+mushies$veil.type = factor(mushies$veil.type)
+
+mushies$veil.type[mushies$veil.type == "u"]
+mushies$veil.type = NULL
+mushies$stalk.root[mushies$stalk.root== '?' ] = NA
+#mushies[!complete.cases(mushies),]
+mushies$stalk.root = NULL
+
+mushies_c = mushies %>% dplyr::select(class)
+mushies = mushies %>% dplyr::select(-class)
+
+mushies.df = model.matrix(~.-1, data = mushies)
+
+pr.mush = prcomp(mushies.df)
+
+screeplot(pr.mush, type = "l", npcs = 25, ylim = c(0,2),main = "PCs for Mushrooms")
+abline(h = 1, col = "purple", lty = 5)
+legend("topright", legend = "Eigenvalue", col = "purple", lty = 5, cex = 1)
+
+pve = cumsum(pr.mush$sdev^2/sum(pr.mush$sdev^2))
+plot(pve, xlab = "PCs", ylab = "Explained Variance", main = "Cumulative Variance")
+pr.df = data.frame(pr.mush$x[,1:2])
+
+cl.mush1 = kmeans(pr.df, 2, )
+cl.mush1$size
+
+palette(viridis(2, begin = .5, end = .9))
+plot(pr.df, col = (cl.mush1$cluster), main = "Clustering with K = 2", xlab = "", ylab = "", pch = 19, cex = 1)
+
+palette(viridis(2, begin = .5, end = .9))
+plot(pr.df, col = (mushies_c$class), main = "Actual Class Separation", xlab = "", ylab = "", pch = 19, cex = 1)
+
+palette(magma(9))
+plot(pr.df, col = (mushies$odor), main = "Odor Separation", xlab = "", ylab = "", pch = 19, cex = 1)
+legend("bottomleft", levels(mushies$odor), col = unique(mushies$odor), pch = 19, cex = 1 )
+
+cm.mush1 = table(data.frame(mushrooms$class, cl.mush1$cluster))
+cm.mush1
+fourfoldplot(cm.mush1, color = viridis(2, begin = .3, end = .8), conf.level = 0, margin = 1, main = "K-Means Confusion Matrix")
+
+acc = sum(apply(cm.mush1, 2, max))/nrow(mushies.df)
+acc
+```
+```{r kmodes}
+########### k-modes ############
+mushies = mushrooms
+
+mushies$class = factor(mushies$class)
+mushies$bruises = factor(mushies$bruises)
+mushies$gill.size = factor(mushies$gill.size)
+mushies$stalk.shape = factor(mushies$stalk.shape)
+mushies$cap.shape = factor(mushies$cap.shape)
+mushies$cap.surface = factor(mushies$cap.surface)
+mushies$cap.color = factor(mushies$cap.color)
+mushies$odor = factor(mushies$odor)
+mushies$gill.attachment = factor(mushies$gill.attachment)
+mushies$gill.spacing = factor(mushies$gill.spacing)
+mushies$gill.color = factor(mushies$gill.color)
+mushies$stalk.root = factor(mushies$stalk.root)
+mushies$stalk.surface.above.ring =factor(mushies$stalk.surface.above.ring)
+mushies$stalk.surface.below.ring = factor(mushies$stalk.surface.below.ring)
+mushies$stalk.color.above.ring = factor(mushies$stalk.color.above.ring)
+mushies$stalk.color.below.ring = factor(mushies$stalk.color.below.ring)
+mushies$veil.color = factor(mushies$veil.color)
+mushies$ring.number = factor(mushies$ring.number)
+mushies$ring.type = factor(mushies$ring.type)
+mushies$spore.print.color = factor(mushies$spore.print.color)
+mushies$population = factor(mushies$population)
+mushies$habitat = factor(mushies$habitat)
+mushies$veil.type = factor(mushies$veil.type)
+
+mushies$veil.type[mushies$veil.type == "u"]
+mushies$veil.type = NULL
+mushies$stalk.root[mushies$stalk.root== '?' ] = NA
+#mushies[!complete.cases(mushies),]
+mushies$stalk.root = NULL
+
+kmode.mush = data.frame(mushies$odor, mushies$spore.print.color)
+mushies$odor = as.data.frame(dummy.code(mushies$odor))
+mushies$spore.print.color = as.data.frame(dummy.code(mushies$spore.print.color))
+
+cl.mush = kmodes(kmode.mush, 2)
+cl.mush$size
+
+
+palette(viridis(2, begin = .5, end = .9))
+plot(kmode.mush, col = (cl.mush$cluster), main = "K-Mode Clustering with K = 2", xlab = "", ylab = "", pch = 19, cex = 1)
+
+
+palette(viridis(2, begin = .5, end = .9))
+plot(kmode.mush, col = (mushies_c$class), main = "Actual Class Separation", xlab = "", ylab = "", pch = 19, cex = 1)
+
+cm.mush = table(data.frame(mushrooms$class, cl.mush$cluster))
+fourfoldplot(cm.mush, color = viridis(2, begin = .3, end = .8), conf.level = 0, margin = 1, main = "K-Modes Confusion Matrix")
+
+acc = sum(apply(cm.mush, 2, max))/nrow(mushies.df)
+acc
+```
+
+```{r SVM}
+set.seed(1)
+mushies = mushrooms
+mushies$class = factor(mushies$class)
+mushies$bruises = factor(mushies$bruises)
+mushies$gill.size = factor(mushies$gill.size)
+mushies$stalk.shape = factor(mushies$stalk.shape)
+
+mushies$cap.shape = factor(mushies$cap.shape)
+mushies$cap.surface = factor(mushies$cap.surface)
+mushies$cap.color = factor(mushies$cap.color)
+mushies$odor = factor(mushies$odor)
+mushies$gill.attachment = factor(mushies$gill.attachment)
+mushies$gill.spacing = factor(mushies$gill.spacing)
+mushies$gill.color = factor(mushies$gill.color)
+mushies$stalk.root = factor(mushies$stalk.root)
+mushies$stalk.surface.above.ring =factor(mushies$stalk.surface.above.ring)
+mushies$stalk.surface.below.ring = factor(mushies$stalk.surface.below.ring)
+mushies$stalk.color.above.ring = factor(mushies$stalk.color.above.ring)
+mushies$stalk.color.below.ring = factor(mushies$stalk.color.below.ring)
+mushies$veil.color = factor(mushies$veil.color)
+mushies$ring.number = factor(mushies$ring.number)
+mushies$ring.type = factor(mushies$ring.type)
+mushies$spore.print.color = factor(mushies$spore.print.color)
+mushies$population = factor(mushies$population)
+mushies$habitat = factor(mushies$habitat)
+mushies$veil.type = factor(mushies$veil.type)
+
+mushies$veil.type[mushies$veil.type == "u"]
+mushies$veil.type = NULL
+mushies$stalk.root[mushies$stalk.root== '?' ] = NA
+mushies$stalk.root = NULL
+
+
+df.mushies = data.frame(mushies$class, mushies$odor, mushies$spore.print.color)
+mushies$odor = as.data.frame(dummy.code(mushies$odor))
+mushies$spore.print.color = as.data.frame(dummy.code(mushies$spore.print.color))
+
+sample_sz = floor(0.75*nrow(df.mushies))
+train_ind = sample(seq_len(nrow(df.mushies)), size=sample_sz)
+sv.train = df.mushies[train_ind,]
+sv.test = df.mushies[-train_ind,]
+sv.labs = sv.test$mushies.class
+
+svm.mush = tune(svm, mushies.class~., data = sv.train, kernel = "radial", ranges = list(cost = c(1, 5, 10, 100), gamma = c(1, 2, 3, 4)))
+svm.best = svm.mush$best.model
+summary(svm.best)
+
+svm.pred = predict(svm.best, newdata = sv.test)
+
+sv.mush = table(data.frame(svm.pred, sv.labs))
+sv.mush
+fourfoldplot(sv.mush, color = viridis(2, begin = .3, end = .8), conf.level = 0, margin = 1, main = "SVM Confusion Matrix")
+
+
+```
